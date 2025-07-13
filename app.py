@@ -62,7 +62,7 @@ def label_to_text(label):
 
 # ========== Telegram Alert ==========
 def send_telegram_alert(message):
-    # Escape HTML for Telegram and enforce length limit
+    # Escape HTML and enforce length limit
     escaped_message = html.escape(message)
     MAX_LENGTH = 4000
     if len(escaped_message) > MAX_LENGTH:
@@ -102,13 +102,11 @@ def scan_reddit():
     sentiment = get_classifier()
     subreddit = reddit.subreddit("NationalServiceSG")
     keywords = ["5sir", "5 sir"]
-    cutoff_timestamp = time() - (5 * 60)  # Only scan posts/comments from last 5 mins
+    cutoff_timestamp = time() - (5 * 60)  # Last 5 mins
     print(f"⏳ Scanning content since: {datetime.fromtimestamp(cutoff_timestamp, tz=sg_timezone)}")
 
     for submission in subreddit.new(limit=20):  # Adjust limit if needed
-        if submission.created_utc < cutoff_timestamp:
-            print(f"⏩ Skipping post u/{submission.author} (older than 5 mins)")
-            continue
+        skip_post_alert = submission.created_utc < cutoff_timestamp
 
         post_date = datetime.fromtimestamp(submission.created_utc, tz=sg_timezone).strftime('%Y-%m-%d %H:%M:%S')
         post_text = (submission.title + " " + (submission.selftext or "")).strip()
@@ -119,7 +117,6 @@ def scan_reddit():
         post_emoji, post_sentiment = label_to_text(post_result["label"])
         post_score = post_result["score"]
 
-        # Start building Telegram message
         telegram_msg = (
             f"🚨 *5SIR POST/COMMENT Activity Detected!*\n"
             f"📅 Date: {post_date} (SGT)\n"
@@ -134,12 +131,11 @@ def scan_reddit():
 
         found_5sir_in_comments = False
 
-        # ✅ Scan comments under this post
+        # ✅ Scan all comments (even if post is old)
         submission.comments.replace_more(limit=None)
         for comment in submission.comments.list():
             if comment.created_utc < cutoff_timestamp:
-                print(f"⏩ Skipping comment u/{comment.author} (older than 5 mins)")
-                continue
+                continue  # Only care about new comments
 
             comment_text = comment.body.strip() if comment.body else ""
             lower_comment_text = comment_text.lower()
@@ -161,8 +157,8 @@ def scan_reddit():
                     f"---------------------------------------\n"
                 )
 
-        # 🔥 Send alert if post OR any comment mentions 5sir
-        if post_mentions_5sir or found_5sir_in_comments:
+        # 🔥 Send alert if post is new OR any new comments found
+        if (not skip_post_alert and post_mentions_5sir) or found_5sir_in_comments:
             telegram_msg += "============================="
             send_telegram_alert(telegram_msg)
 
