@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 import gc
 import torch
 
-# Disable gradients
+# Disable gradients for faster inference
 torch.set_grad_enabled(False)
 
 app = FastAPI()
@@ -39,7 +39,7 @@ classifier = None
 def get_classifier():
     global classifier
     if classifier is None:
-        print("🧠 Lazy-loading sentiment model...")
+        print("🧠 Lazy-loading DistilBERT sentiment model...")
         classifier = pipeline(
             "sentiment-analysis",
             model="distilbert-base-uncased-finetuned-sst-2-english",
@@ -49,6 +49,14 @@ def get_classifier():
         )
         print("✅ Model loaded.")
     return classifier
+
+# ========== Telegram Alert ==========
+def send_telegram_alert(message):
+    for cid in TELEGRAM_CHAT_IDS:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {'chat_id': cid, 'text': message}
+        response = requests.post(url, data=payload)
+        print(f"📤 Sent alert to {cid} – Status: {response.status_code}")
 
 # ========== Routes ==========
 @app.get("/")
@@ -73,19 +81,43 @@ def scan_reddit():
     sentiment = get_classifier()
     subreddit = reddit.subreddit("NationalServiceSG")
     keywords = ["5sir", "5 sir"]
-    print("🤖 Scanning for 5SIR mentions...")
+    print("🤖 Scanning posts & comments for 5SIR mentions...")
 
-    for submission in subreddit.new(limit=20):
+    for submission in subreddit.new(limit=20):  # Scan latest 20 posts
         post_date = datetime.fromtimestamp(submission.created_utc, tz=sg_timezone).strftime('%Y-%m-%d %H:%M:%S')
         post_text = (submission.title + " " + (submission.selftext or "")).strip()
         lower_post_text = post_text.lower()
 
+        print(f"📝 Checking post: {submission.title}")
         post_mentions_5sir = any(k in lower_post_text for k in keywords)
-        post_result = sentiment(post_text[:512])[0]
-        post_label = post_result["label"]
-        post_score = post_result["score"]
 
         if post_mentions_5sir:
+            print("🎯 Keyword matched in POST!")
+            post_result = sentiment(post_text[:512])[0]
+            post_label = post_result["label"]
+            post_score = post_result["score"]
             send_telegram_alert(f"🚨 5SIR Post Detected: {post_label} ({post_score:.3f})\n{post_text[:300]}...")
+
+        # ✅ Scan comments under this post
+        submission.comments.replace_more(limit=0)
+        for comment in submission.comments.list():
+            comment_text = comment.body.strip() if comment.body else ""
+            lower_comment_text = comment_text.lower()
+
+            print(f"💬 Checking comment by u/{comment.author}: {comment_text[:80]}...")
+            comment_mentions_5sir = any(k in lower_comment_text for k in keywords)
+
+            if comment_mentions_5sir:
+                print("🎯 Keyword matched in COMMENT!")
+                comment_result = sentiment(comment_text[:512])[0]
+                comment_label = comment_result["label"]
+                comment_score = comment_result["score"]
+                comment_date = datetime.fromtimestamp(comment.created_utc, tz=sg_timezone).strftime('%Y-%m-%d %H:%M:%S')
+                send_telegram_alert(
+                    f"🚨 5SIR Comment Detected: {comment_label} ({comment_score:.3f})\n"
+                    f"📅 {comment_date}\n"
+                    f"👤 u/{comment.author}\n"
+                    f"💭 {comment_text[:300]}..."
+                )
 
     gc.collect()
