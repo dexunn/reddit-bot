@@ -41,24 +41,25 @@ classifier = None
 def get_classifier():
     global classifier
     if classifier is None:
-        print("🧠 Lazy-loading sentiment model...")
+        print("🧠 Lazy-loading CardiffNLP sentiment model...")
         classifier = pipeline(
             "sentiment-analysis",
-            model="distilbert-base-uncased-finetuned-sst-2-english",
-            tokenizer="distilbert-base-uncased-finetuned-sst-2-english",
+            model="cardiffnlp/twitter-roberta-base-sentiment",
+            tokenizer="cardiffnlp/twitter-roberta-base-sentiment",
             framework="pt",
-            device=-1
+            device=-1  # CPU only
         )
         print("✅ Model loaded.")
     return classifier
 
-# ========== Emoji Mapping ==========
+# ========== Emoji Mapping (3-Class) ==========
 def label_to_text(label):
     mapping = {
-        "NEGATIVE": ("🔴", "Negative"),
-        "POSITIVE": ("🟢", "Positive")
+        "LABEL_0": ("🔴", "Negative"),
+        "LABEL_1": ("⚪", "Neutral"),
+        "LABEL_2": ("🟢", "Positive")
     }
-    return mapping.get(label, ("⚪", "Neutral"))
+    return mapping.get(label, ("❓", "Unknown"))
 
 # ========== Telegram Alert ==========
 def send_telegram_alert(message):
@@ -156,4 +157,6 @@ def scan_reddit():
             )
             send_telegram_alert(telegram_msg)
 
+    # 🧹 Clean up memory after each scan
     gc.collect()
+    torch.cuda.empty_cache()
