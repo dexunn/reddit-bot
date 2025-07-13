@@ -6,6 +6,7 @@ from transformers import pipeline
 from datetime import datetime, timezone, timedelta
 import gc
 import torch
+from time import time
 
 # Disable gradients for faster inference
 torch.set_grad_enabled(False)
@@ -89,9 +90,14 @@ def scan_reddit():
     sentiment = get_classifier()
     subreddit = reddit.subreddit("NationalServiceSG")
     keywords = ["5sir", "5 sir"]
-    print("🤖 Scanning posts & comments for 5SIR mentions...")
+    cutoff_timestamp = time() - (5 * 60)  # Only scan posts/comments from last 5 mins
+    print(f"⏳ Scanning content since: {datetime.fromtimestamp(cutoff_timestamp, tz=sg_timezone)}")
 
     for submission in subreddit.new(limit=20):  # Adjust limit if needed
+        if submission.created_utc < cutoff_timestamp:
+            print(f"⏩ Skipping post u/{submission.author} (older than 5 mins)")
+            continue
+
         post_date = datetime.fromtimestamp(submission.created_utc, tz=sg_timezone).strftime('%Y-%m-%d %H:%M:%S')
         post_text = (submission.title + " " + (submission.selftext or "")).strip()
         lower_post_text = post_text.lower()
@@ -119,6 +125,10 @@ def scan_reddit():
         # ✅ Scan comments under this post
         submission.comments.replace_more(limit=None)
         for comment in submission.comments.list():
+            if comment.created_utc < cutoff_timestamp:
+                print(f"⏩ Skipping comment u/{comment.author} (older than 5 mins)")
+                continue
+
             comment_text = comment.body.strip() if comment.body else ""
             lower_comment_text = comment_text.lower()
 
