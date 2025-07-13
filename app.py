@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 import gc
 import torch
 from time import time
+import html
 
 # Disable gradients for faster inference
 torch.set_grad_enabled(False)
@@ -61,9 +62,20 @@ def label_to_text(label):
 
 # ========== Telegram Alert ==========
 def send_telegram_alert(message):
+    # Escape HTML for Telegram and enforce length limit
+    escaped_message = html.escape(message)
+    MAX_LENGTH = 4000
+    if len(escaped_message) > MAX_LENGTH:
+        print("⚠️ Message too long, truncating...")
+        escaped_message = escaped_message[:MAX_LENGTH] + "\n\n...truncated"
+
     for cid in TELEGRAM_CHAT_IDS:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {'chat_id': cid, 'text': message, 'parse_mode': 'Markdown'}
+        payload = {
+            'chat_id': cid,
+            'text': escaped_message,
+            'parse_mode': 'HTML'
+        }
         response = requests.post(url, data=payload)
         print(f"📤 Sent alert to {cid} – Status: {response.status_code}")
 
