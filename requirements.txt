@@ -1,4 +1,6 @@
-praw
-requests
-transformers
-torch
+fastapi==0.111.0
+praw==7.7.1
+transformers==4.41.1
+torch==2.3.0
+requests==2.32.3
+uvicorn==0.29.0

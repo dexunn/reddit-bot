@@ -1,15 +1,20 @@
-# Use Python slim image
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# Set working directory
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8080
+
 WORKDIR /app
 
-# Install dependencies
+RUN apt-get update && apt-get install -y \
+    gcc libffi-dev libssl-dev build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy bot code
-COPY app.py .
+COPY . .
 
-# Run app
-CMD ["python", "app.py"]
+EXPOSE 8080
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
