@@ -102,64 +102,58 @@ def scan_reddit():
     sentiment = get_classifier()
     subreddit = reddit.subreddit("NationalServiceSG")
     keywords = ["5sir", "5 sir"]
-    cutoff_timestamp = time() - (5 * 60)  # Last 5 mins
+    cutoff_timestamp = time() - (5 * 60)  # Last 5 minutes
     print(f"⏳ Scanning content since: {datetime.fromtimestamp(cutoff_timestamp, tz=sg_timezone)}")
 
-    for submission in subreddit.new(limit=20):  # Adjust limit if needed
-        skip_post_alert = submission.created_utc < cutoff_timestamp
+    # 🔥 Scan New Posts
+    for submission in subreddit.new(limit=20):
+        if submission.created_utc < cutoff_timestamp:
+            continue  # Only alert for posts created in last 5 mins
 
         post_date = datetime.fromtimestamp(submission.created_utc, tz=sg_timezone).strftime('%Y-%m-%d %H:%M:%S')
         post_text = (submission.title + " " + (submission.selftext or "")).strip()
         lower_post_text = post_text.lower()
 
-        post_mentions_5sir = any(k in lower_post_text for k in keywords)
-        post_result = sentiment(post_text[:512])[0]
-        post_emoji, post_sentiment = label_to_text(post_result["label"])
-        post_score = post_result["score"]
+        if any(k in lower_post_text for k in keywords):
+            post_result = sentiment(post_text[:512])[0]
+            post_emoji, post_sentiment = label_to_text(post_result["label"])
+            post_score = post_result["score"]
 
-        telegram_msg = (
-            f"🚨 *5SIR POST/COMMENT Activity Detected!*\n"
-            f"📅 Date: {post_date} (SGT)\n"
-            f"{post_emoji} Post Sentiment: {post_sentiment} ({post_score:.3f})\n"
-            f"👤 Author: u/{submission.author}\n"
-            f"📍 Subreddit: r/{submission.subreddit.display_name}\n"
-            f"📝 Title: {submission.title}\n"
-            f"🔗 https://reddit.com{submission.permalink}\n\n"
-            f"💬 All Comments Under This Post:\n"
-            f"---------------------------------------\n"
-        )
+            telegram_msg = (
+                f"🚨 *5SIR POST Detected!*\n"
+                f"📅 Date: {post_date} (SGT)\n"
+                f"{post_emoji} Sentiment: {post_sentiment} ({post_score:.3f})\n"
+                f"👤 Author: u/{submission.author}\n"
+                f"📝 Title: {submission.title}\n"
+                f"🔗 https://reddit.com{submission.permalink}\n"
+                f"============================="
+            )
+            send_telegram_alert(telegram_msg)
 
-        found_5sir_in_comments = False
+    # 🔥 Scan New Comments Site-Wide
+    for comment in subreddit.comments(limit=50):
+        if comment.created_utc < cutoff_timestamp:
+            continue  # Only alert for comments created in last 5 mins
 
-        # ✅ Scan all comments (even if post is old)
-        submission.comments.replace_more(limit=None)
-        for comment in submission.comments.list():
-            if comment.created_utc < cutoff_timestamp:
-                continue  # Only care about new comments
+        comment_text = comment.body.strip() if comment.body else ""
+        lower_comment_text = comment_text.lower()
 
-            comment_text = comment.body.strip() if comment.body else ""
-            lower_comment_text = comment_text.lower()
+        if any(k in lower_comment_text for k in keywords):
+            comment_result = sentiment(comment_text[:512])[0]
+            comment_emoji, comment_sentiment = label_to_text(comment_result["label"])
+            comment_score = comment_result["score"]
+            comment_date = datetime.fromtimestamp(comment.created_utc, tz=sg_timezone).strftime('%Y-%m-%d %H:%M:%S')
+            comment_link = f"https://reddit.com{comment.permalink}"
 
-            if any(k in lower_comment_text for k in keywords):
-                found_5sir_in_comments = True
-                comment_result = sentiment(comment_text[:512])[0]
-                comment_emoji, comment_sentiment = label_to_text(comment_result["label"])
-                comment_score = comment_result["score"]
-                comment_date = datetime.fromtimestamp(comment.created_utc, tz=sg_timezone).strftime('%Y-%m-%d %H:%M:%S')
-                comment_link = f"https://reddit.com{comment.permalink}"
-
-                telegram_msg += (
-                    f"{comment_emoji} 📅 {comment_date} (SGT)\n"
-                    f"👤 u/{comment.author}\n"
-                    f"💭 {comment_text[:300]}...\n"
-                    f"💬 Sentiment: {comment_sentiment} ({comment_score:.3f})\n"
-                    f"🔗 {comment_link}\n"
-                    f"---------------------------------------\n"
-                )
-
-        # 🔥 Send alert if post is new OR any new comments found
-        if (not skip_post_alert and post_mentions_5sir) or found_5sir_in_comments:
-            telegram_msg += "============================="
+            telegram_msg = (
+                f"🚨 *5SIR COMMENT Detected!*\n"
+                f"📅 Date: {comment_date} (SGT)\n"
+                f"{comment_emoji} Sentiment: {comment_sentiment} ({comment_score:.3f})\n"
+                f"👤 Author: u/{comment.author}\n"
+                f"💭 {comment_text[:300]}...\n"
+                f"🔗 {comment_link}\n"
+                f"============================="
+            )
             send_telegram_alert(telegram_msg)
 
     gc.collect()
