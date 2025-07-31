@@ -41,7 +41,7 @@ classifier = None
 def get_classifier():
     global classifier
     if classifier is None:
-        print("🧠 Lazy-loading CardiffNLP sentiment model...")
+        print("Lazy-loading CardiffNLP sentiment model...")
         classifier = pipeline(
             "sentiment-analysis",
             model="cardiffnlp/twitter-roberta-base-sentiment",
@@ -49,7 +49,7 @@ def get_classifier():
             framework="pt",
             device=-1  # CPU only
         )
-        print("✅ Model loaded.")
+        print("Model loaded.")
     return classifier
 
 # ========== Emoji Mapping (3-Class) ==========
@@ -67,7 +67,7 @@ def send_telegram_alert(message):
     escaped_message = html.escape(message)
     MAX_LENGTH = 4000
     if len(escaped_message) > MAX_LENGTH:
-        print("⚠️ Message too long, truncating...")
+        print("Message too long, truncating...")
         escaped_message = escaped_message[:MAX_LENGTH] + "\n\n...truncated"
 
     for cid in TELEGRAM_CHAT_IDS:
@@ -78,19 +78,19 @@ def send_telegram_alert(message):
             'parse_mode': 'HTML'
         }
         response = requests.post(url, data=payload)
-        print(f"📤 Sent alert to {cid} – Status: {response.status_code}")
+        print(f"Sent alert to {cid} – Status: {response.status_code}")
 
 # ========== Routes ==========
 @app.get("/")
 @app.post("/")
 async def run_bot():
     try:
-        print("🚀 Starting Reddit scan...")
+        print("Starting Reddit scan...")
         scan_reddit()
-        print("✅ Scan completed.")
+        print("Scan completed.")
         return {"status": "success", "message": "Reddit bot triggered successfully"}
     except Exception as e:
-        error_msg = f"🔥 ERROR: {str(e)}"
+        error_msg = f"ERROR: {str(e)}"
         print(error_msg)
         return {"status": "error", "message": error_msg}
 
@@ -104,9 +104,9 @@ def scan_reddit():
     subreddit = reddit.subreddit("NationalServiceSG")
     keywords = ["5sir", "5 sir"]
     cutoff_timestamp = time() - (5 * 60)  # Last 5 minutes
-    print(f"⏳ Scanning content since: {datetime.fromtimestamp(cutoff_timestamp, tz=sg_timezone)}")
+    print(f"Scanning content since: {datetime.fromtimestamp(cutoff_timestamp, tz=sg_timezone)}")
 
-    # 🔥 Scan New Posts
+    # Scan New Posts
     for submission in subreddit.new(limit=20):
         if submission.created_utc < cutoff_timestamp:
             continue  # Only alert for posts created in last 5 mins
@@ -131,7 +131,7 @@ def scan_reddit():
             )
             send_telegram_alert(telegram_msg)
 
-    # 🔥 Scan New Comments Site-Wide
+    # Scan New Comments Site-Wide
     for comment in subreddit.comments(limit=50):
         if comment.created_utc < cutoff_timestamp:
             continue  # Only alert for comments created in last 5 mins
@@ -157,6 +157,6 @@ def scan_reddit():
             )
             send_telegram_alert(telegram_msg)
 
-    # 🧹 Clean up memory after each scan
+    # Clean up memory after each scan
     gc.collect()
     torch.cuda.empty_cache()
